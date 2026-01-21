@@ -1,113 +1,132 @@
-import pandas as pd
-import numpy as np
-import yfinance as yf
-import statsmodels.api as sm
-import plotly.express as px
+import csv
+import statistics
+from dataclasses import dataclass
+import plotly.graph_objs as go
 
-class CointegrationHeatmap:
+tickers = [
+    "AAPL", "MSFT", "GOOGL", "GOOG", "BTC", "ETH"
+]
 
-    def __init__(
-        self,
-        lookback=200,
-        zscore_window=30,
-        significance_level=0.05
-    ):
-        self.lookback = lookback
-        self.zscore_window = zscore_window
-        self.significance_level = significance_level
+@dataclass
+class Series:
+    date: list
+    open: list
+    high: list
+    low: list
+    close: list
+    volume: list
 
-    def download_prices(self, tickers):
-        print(f"Downloading {len(tickers)} tickers...")
+    def at(self, i: int):
+        return {
+            "date": self.date[i],
+            "open": self.open[i],
+            "high": self.high[i],
+            "low": self.low[i],
+            "close": self.close[i],
+            "adj_close": self.adj_close[i],
+            "volume": self.volume[i],
+        }
 
-        data = yf.download(
-            tickers,
-            period="1y",
-            interval="1d",
-            auto_adjust=True,
-            progress=False
-        )["Close"]
+    def last(self):
+        return self.at(-1)
 
-        data = data.dropna()
-        print(f"Downloaded price matrix shape: {data.shape}")
-        return data
+def load_ticker_csvs(tickers, folder="../OHLCV_data/"):
+    out = {}
 
-    def engle_granger(self, series_x, series_y):
+    for t in tickers:
+        path = f"{folder}/{t}.csv"
+        dt, opn, high, low, close, vol = [], [], [], [], [], []
 
-        x = series_x
-        y = series_y
+        with open(path, "r", newline="") as f:
+            r = csv.reader(f)
 
-        x_const = sm.add_constant(x)
-        model = sm.OLS(y, x_const).fit()
-        beta = model.params[1]
+            next(r)  # skip row 1
+            next(r)  # skip row 2
 
-        resid = y - beta * x
-        adf_pvalue = sm.tsa.adfuller(resid)[1]
+            for row in r:
+                if not row or len(row) < 6:
+                    continue
 
-        return adf_pvalue, beta, resid
+                if row[0] == "" or row[1] == "" or row[2] == "" or row[3] == "" or row[4] == "" or row[5] == "":
+                    continue
 
-    def compute_zscore(self, series):
-        mean = series.rolling(self.zscore_window).mean()
-        std = series.rolling(self.zscore_window).std()
-        return (series - mean) / std
+                dt.append(row[0])
+                close.append(float(row[1]))
+                high.append(float(row[2]))
+                low.append(float(row[3]))
+                opn.append(float(row[4]))
+                vol.append(float(row[5]))
 
-    def generate(self, tickers):
-        prices = self.download_prices(tickers)
+        out[t] = Series(dt, opn, high, low, close, vol)
 
-        n = len(tickers)
-        z_matrix = np.zeros((n, n))
-        p_matrix = np.zeros((n, n))
+    return out
 
-        print("Running cointegration tests...")
-        for i in range(n):
-            for j in range(n):
-                if i == j:
-                    z_matrix[i, j] = 0
-                    p_matrix[i, j] = 1
-                else:
-                    x = prices[tickers[i]]
-                    y = prices[tickers[j]]
-
-                    pvalue, beta, resid = self.engle_granger(x, y)
-                    zscore_series = self.compute_zscore(resid)
-
-                    z_matrix[i, j] = zscore_series.iloc[-1]
-                    p_matrix[i, j] = pvalue
-
-        # Convert to DataFrames
-        z_df = pd.DataFrame(z_matrix, index=tickers, columns=tickers)
-        p_df = pd.DataFrame(p_matrix, index=tickers, columns=tickers)
-
-        # Plot heatmap
-        fig = px.imshow(
-            z_df,
-            color_continuous_scale="RdBu",
-            title="Cointegration Z-Score Heatmap",
-            labels=dict(x="Ticker", y="Ticker", color="Z-Score"),
-            aspect="auto",
+def show_heatmap(grid, tickers, title="Correlation Heatmap"):
+    n = len(tickers)
+    z = [row[:] for row in grid]
+    text = [[f"{v:.2f}" for v in row] for row in grid]
+    for i in range(n):
+        z[i][i] = None
+        text[i][i] = ""
+    fig = go.Figure(
+        data=go.Heatmap(
+            z=z,
+            x=tickers,
+            y=tickers,
+            text=text,
+            texttemplate="%{text}",
+            hovertemplate="X: %{x}<br>Y: %{y}<br>Value: %{z:.4f}<extra></extra>",
         )
-
-        fig.update_layout(width=1000, height=900)
-        fig.show(renderer="browser")
-
-        return z_df, p_df
-
-if __name__ == "__main__":
-
-    tickers = [
-        "AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "META", "NVDA",
-        "TSLA", "AMD", "INTC", "AVGO", "ADBE", "CSCO",
-    ]
-
-    coint = CointegrationHeatmap(
-        lookback=200,
-        zscore_window=30,
-        significance_level=0.05
     )
+    fig.update_layout(title=title, template="plotly_dark")
+    fig.show(renderer="browser")
 
-    zscores, pvalues = coint.generate(tickers)
+def main():
+    tickerData = load_ticker_csvs(tickers)
+    tickerGrid = [[0.0 for _ in tickers] for _ in tickers]
+    for a, ticker1 in enumerate(tickers):
+        for b, ticker2 in enumerate(tickers):
 
-    print("\nFinal Z-Scores Matrix")
-    print(zscores)
+            # get and format data
+            series1 = tickerData[ticker1]
+            series2 = tickerData[ticker2]
+            dates = {}
+            pairs = []
+            for i in range(len(series1.date)):
+                dates[series1.date[i]] = series1.close[i]
+            for j in range(len(series2.date)):
+                if series2.date[j] in dates:
+                    pairs.append((series2.close[j], dates.get(series2.date[j])))
+            #print(pairs)
 
-    print("\nCointegration P-Values")
-    print(pvalues)
+            # calculate covariance
+            justSeries1 = []
+            justSeries2 = []
+            for pair in pairs:
+                justSeries1.append(pair[0])
+                justSeries2.append(pair[1])
+            returns1 = []
+            returns2 = []
+            for i in range(1, len(justSeries1)):
+                returns1.append((justSeries1[i] - justSeries1[i - 1]) / justSeries1[i - 1])
+                returns2.append((justSeries2[i] - justSeries2[i - 1]) / justSeries2[i - 1])
+            series1mean = sum(returns1)/len(returns1)
+            series2mean = sum(returns2)/len(returns2)
+            #print(series1mean, series2mean)
+            adjustedPairs = []
+            for i in range(len(pairs)-1):
+                adjustedPairs.append((returns1[i] - series1mean, returns2[i] - series2mean))
+            products = []
+            for i in range(len(adjustedPairs)):
+                products.append(adjustedPairs[i][0] * adjustedPairs[i][1])
+            total = sum(products)
+            covariance = total/(len(pairs)-1)
+            #print(covariance)
+            correlationCoefficient = (
+                    covariance/(statistics.stdev(returns1)*statistics.stdev(returns2))
+            )
+            #print(correlationCoefficient)
+            tickerGrid[a][b] = correlationCoefficient
+    show_heatmap(tickerGrid, tickers)
+
+main()
