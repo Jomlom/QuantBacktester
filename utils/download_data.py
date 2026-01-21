@@ -1,8 +1,7 @@
 import yfinance as yf
 
 tickers = [
-    "AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "META", "NVDA",
-    "TSLA", "AMD", "INTC", "AVGO", "ADBE", "CSCO",
+    "AAPL", "MSFT", "GOOGL", "GOOG", "BTC", "ETH"
 ]
 
 for name in tickers:
