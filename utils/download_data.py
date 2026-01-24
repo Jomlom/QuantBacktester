@@ -1,8 +1,11 @@
 import yfinance as yf
 
 tickers = [
-    "AAPL", "MSFT", "GOOGL", "GOOG", "BTC", "ETH"
+    "SPY",
+    "BTC-USD", "ETH-USD", "BNB-USD", "SOL-USD", "XRP-USD",
+    "ADA-USD", "DOGE-USD", "AVAX-USD", "DOT-USD", "LINK-USD"
 ]
+
 
 for name in tickers:
     data = yf.download(name, period='1wk', interval='1m', auto_adjust=True)

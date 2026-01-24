@@ -4,8 +4,11 @@ from dataclasses import dataclass
 import plotly.graph_objs as go
 
 tickers = [
-    "AAPL", "MSFT", "GOOGL", "GOOG", "BTC", "ETH"
+    "SPY",
+    "BTC-USD", "ETH-USD", "BNB-USD", "SOL-USD", "XRP-USD",
+    "ADA-USD", "DOGE-USD", "AVAX-USD", "DOT-USD", "LINK-USD"
 ]
+
 
 @dataclass
 class Series:
@@ -97,6 +100,8 @@ def main():
             for j in range(len(series2.date)):
                 if series2.date[j] in dates:
                     pairs.append((series2.close[j], dates.get(series2.date[j])))
+            if len(pairs) == 0:
+                continue
             #print(pairs)
 
             # calculate covariance
